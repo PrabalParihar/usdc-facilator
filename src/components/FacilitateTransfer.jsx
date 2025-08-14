@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAccount, useSignTypedData, usePublicClient, useWalletClient } from 'wagmi';
-import { ethers } from 'ethers';
+import { useAccount, useSignTypedData, usePublicClient } from 'wagmi';
 import toast from 'react-hot-toast';
 import {
   createUSDCPermitMessage,
@@ -12,11 +11,11 @@ import {
   validateAmount
 } from '../utils/permitUtils';
 import { CONFIG, USDC_ABI, FACILITATOR_ABI } from '../config';
+import { apiService } from '../services/api';
 
 const FacilitateTransfer = () => {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
   const { signTypedDataAsync } = useSignTypedData();
 
   const [formData, setFormData] = useState({
@@ -210,56 +209,31 @@ const FacilitateTransfer = () => {
       
       console.log('Signature components:', { v, r, s });
 
-      setTxStatus('Sending transaction...');
+      setTxStatus('Sending to backend for execution...');
 
-      const provider = new ethers.BrowserProvider(walletClient);
-      const signer = await provider.getSigner();
-      
-      const facilitatorContract = new ethers.Contract(
-        CONFIG.FACILITATOR_ADDRESS,
-        FACILITATOR_ABI,
-        signer
-      );
+      // Send permit data to backend API
+      const permitData = {
+        owner: formData.ownerAddress,
+        to: formData.recipientAddress,
+        value: value,
+        deadline: deadline,
+        v: v,
+        r: r,
+        s: s,
+        feeAmount: feeAmountFormatted,
+        nonce: contractInfo.nonce,
+        chainId: CONFIG.CHAIN_ID,
+        facilitatorAddress: CONFIG.FACILITATOR_ADDRESS,
+        tokenAddress: CONFIG.USDC_ADDRESS
+      };
 
-      // First try to estimate gas to get more error details
-      try {
-        const gasEstimate = await facilitatorContract.facilitateTransferWithPermit.estimateGas(
-          formData.ownerAddress,
-          formData.recipientAddress,
-          value,
-          deadline,
-          v,
-          r,
-          s,
-          feeAmountFormatted
-        );
-        console.log('Gas estimate:', gasEstimate.toString());
-      } catch (estimateError) {
-        console.error('Gas estimation failed:', estimateError);
-        // Try to decode the error
-        if (estimateError.data) {
-          console.error('Error data:', estimateError.data);
-        }
-      }
+      console.log('Sending permit data to API:', permitData);
 
-      const tx = await facilitatorContract.facilitateTransferWithPermit(
-        formData.ownerAddress,
-        formData.recipientAddress,
-        value,
-        deadline,
-        v,
-        r,
-        s,
-        feeAmountFormatted
-      );
+      const result = await apiService.executePermitTransfer(permitData);
 
-      setTxStatus('Transaction pending...');
-      
-      const receipt = await tx.wait();
-      
-      if (receipt.status === 1) {
+      if (result.success) {
         setTxStatus('Transaction confirmed!');
-        toast.success(`Transaction successful! Hash: ${receipt.hash.slice(0, 10)}...`);
+        toast.success(`Transaction successful! Hash: ${result.txHash.slice(0, 10)}...`);
         
         setFormData(prev => ({
           ...prev,
@@ -270,7 +244,7 @@ const FacilitateTransfer = () => {
         
         await fetchContractInfo();
       } else {
-        throw new Error('Transaction failed');
+        throw new Error(result.error || 'Transaction failed');
       }
     } catch (error) {
       console.error('Transaction error:', error);

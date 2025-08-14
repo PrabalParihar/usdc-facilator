@@ -1,6 +1,6 @@
-# USDC Facilitator Frontend
+# USDC Facilitator
 
-A React application that interacts with the USDCFacilitator smart contract to enable gasless USDC transfers using EIP-712 permit signatures.
+A full-stack application that enables gasless token transfers using EIP-712 permit signatures. Users sign permits off-chain, and a backend service executes the transactions.
 
 ## Features
 
@@ -21,7 +21,9 @@ A React application that interacts with the USDCFacilitator smart contract to en
 
 ## Installation
 
-1. Clone the repository and install dependencies:
+### Frontend Setup
+
+1. Install frontend dependencies:
 
 ```bash
 npm install
@@ -36,23 +38,61 @@ cp .env.example .env
 3. Configure your environment variables in `.env`:
 
 ```env
-REACT_APP_USDC_ADDRESS=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-REACT_APP_FACILITATOR_ADDRESS=<YOUR_DEPLOYED_CONTRACT_ADDRESS>
+REACT_APP_USDC_ADDRESS=0xf5497Ce765848b05Bc2b37c8F04979270767555d
+REACT_APP_FACILITATOR_ADDRESS=0xEF6096a90b3F9078BEAF60Bf20a635d85AD000b8
 REACT_APP_FEE_COLLECTOR_ADDRESS=<FEE_COLLECTOR_ADDRESS>
-REACT_APP_CHAIN_ID=1
-REACT_APP_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/<YOUR_API_KEY>
+REACT_APP_CHAIN_ID=84532
+REACT_APP_RPC_URL=https://base-sepolia-rpc.publicnode.com
 REACT_APP_WALLET_CONNECT_PROJECT_ID=<YOUR_WALLETCONNECT_PROJECT_ID>
+REACT_APP_API_URL=http://localhost:3001/api
+```
+
+### Backend Setup
+
+1. Navigate to backend directory and install dependencies:
+
+```bash
+cd backend
+npm install
+```
+
+2. Create backend `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+3. Configure backend environment variables:
+
+```env
+PORT=3001
+RPC_URL=https://base-sepolia-rpc.publicnode.com
+CHAIN_ID=84532
+USDC_ADDRESS=0xf5497Ce765848b05Bc2b37c8F04979270767555d
+FACILITATOR_ADDRESS=0xEF6096a90b3F9078BEAF60Bf20a635d85AD000b8
+ADMIN_PRIVATE_KEY=<YOUR_ADMIN_PRIVATE_KEY>
 ```
 
 ## Running the Application
 
-Start the development server:
+### Start Backend Server
+
+```bash
+cd backend
+npm run dev
+```
+
+The backend will run on [http://localhost:3001](http://localhost:3001)
+
+### Start Frontend
+
+In a new terminal:
 
 ```bash
 npm start
 ```
 
-The application will open at [http://localhost:3000](http://localhost:3000)
+The frontend will open at [http://localhost:3000](http://localhost:3000)
 
 ## Build for Production
 
@@ -100,6 +140,19 @@ Central configuration file containing:
 - Chain configuration
 - Helper functions
 
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│   Frontend  │────▶│   Backend    │────▶│  Smart Contract │
+│   (React)   │     │   (Node.js)  │     │  (Facilitator)  │
+└─────────────┘     └──────────────┘     └─────────────────┘
+      │                     │                      │
+      │                     │                      │
+   Signs Permit      Executes with          Validates &
+   Off-chain         Admin Wallet           Transfers
+```
+
 ## How It Works
 
 1. **Connect Wallet**: User connects their MetaMask wallet
@@ -108,8 +161,8 @@ Central configuration file containing:
    - Total transfer amount (including fees)
    - Fee amount for the facilitator
    - Permit deadline (in minutes)
-3. **Sign Permit**: User signs an EIP-712 permit message off-chain
-4. **Execute Transfer**: The facilitator contract executes the transfer using the permit signature
+3. **Sign Permit**: User signs an EIP-712 permit message off-chain (no gas)
+4. **Backend Execution**: API receives the signed permit and executes the transaction using an admin wallet
 5. **Transaction Confirmation**: User receives confirmation once the transaction is mined
 
 ## USDC Permit Specifics
