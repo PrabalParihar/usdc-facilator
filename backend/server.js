@@ -28,6 +28,30 @@ const FACILITATOR_ABI = [
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "address", "name": "owner", "type": "address"},
+      {
+        "components": [
+          {"internalType": "address", "name": "to", "type": "address"},
+          {"internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "internalType": "struct USDCFacilitator.Recipient[]",
+        "name": "recipients",
+        "type": "tuple[]"
+      },
+      {"internalType": "uint256", "name": "totalValue", "type": "uint256"},
+      {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+      {"internalType": "uint8", "name": "v", "type": "uint8"},
+      {"internalType": "bytes32", "name": "r", "type": "bytes32"},
+      {"internalType": "bytes32", "name": "s", "type": "bytes32"},
+      {"internalType": "uint256", "name": "feeAmount", "type": "uint256"}
+    ],
+    "name": "facilitateBulkTransferWithPermit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
   }
 ];
 
@@ -192,6 +216,183 @@ app.post('/api/execute-permit-transfer', async (req, res) => {
 
   } catch (error) {
     console.error('API error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Internal server error'
+    });
+  }
+});
+
+// Endpoint to execute bulk permit transfer
+app.post('/api/execute-bulk-permit-transfer', async (req, res) => {
+  try {
+    const {
+      owner,
+      recipients,
+      totalValue,
+      deadline,
+      v,
+      r,
+      s,
+      feeAmount,
+      nonce,
+      chainId,
+      facilitatorAddress,
+      tokenAddress
+    } = req.body;
+
+    console.log('Received bulk permit transfer request:', {
+      owner,
+      recipientCount: recipients ? recipients.length : 0,
+      totalValue,
+      feeAmount,
+      deadline,
+      nonce,
+      chainId
+    });
+
+    // Validate required fields
+    if (!owner || !recipients || !Array.isArray(recipients) || recipients.length === 0 || !totalValue || !deadline || v === undefined || !r || !s || !feeAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters'
+      });
+    }
+
+    // Validate recipients array
+    for (let i = 0; i < recipients.length; i++) {
+      const recipient = recipients[i];
+      if (!recipient.to || !recipient.amount) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid recipient at index ${i}: missing 'to' or 'amount'`
+        });
+      }
+    }
+
+    // Validate chain ID
+    if (chainId !== parseInt(process.env.CHAIN_ID)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid chain ID. Expected ${process.env.CHAIN_ID}, got ${chainId}`
+      });
+    }
+
+    // Validate contract addresses
+    if (facilitatorAddress.toLowerCase() !== process.env.FACILITATOR_ADDRESS.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid facilitator contract address'
+      });
+    }
+
+    if (tokenAddress.toLowerCase() !== process.env.USDC_ADDRESS.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token address'
+      });
+    }
+
+    // Check deadline hasn't expired
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    if (currentTimestamp > deadline) {
+      return res.status(400).json({
+        success: false,
+        error: 'Permit deadline has expired'
+      });
+    }
+
+    console.log('Executing bulk transaction with admin wallet:', adminWallet.address);
+    console.log('Recipients:', recipients);
+
+    // Execute the transaction
+    try {
+      // First estimate gas
+      const gasEstimate = await facilitatorContract.facilitateBulkTransferWithPermit.estimateGas(
+        owner,
+        recipients,
+        totalValue,
+        deadline,
+        v,
+        r,
+        s,
+        feeAmount
+      );
+
+      console.log('Bulk gas estimate:', gasEstimate.toString());
+
+      // Execute transaction with 20% buffer on gas
+      const tx = await facilitatorContract.facilitateBulkTransferWithPermit(
+        owner,
+        recipients,
+        totalValue,
+        deadline,
+        v,
+        r,
+        s,
+        feeAmount,
+        {
+          gasLimit: gasEstimate * 120n / 100n // 20% buffer
+        }
+      );
+
+      console.log('Bulk transaction sent:', tx.hash);
+
+      // Wait for confirmation
+      const receipt = await tx.wait();
+
+      console.log('Bulk transaction confirmed:', {
+        hash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        recipientCount: recipients.length
+      });
+
+      return res.json({
+        success: true,
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        recipientCount: recipients.length
+      });
+
+    } catch (txError) {
+      console.error('Bulk transaction execution error:', txError);
+      
+      // Parse error message
+      let errorMessage = 'Bulk transaction failed';
+      if (txError.reason) {
+        errorMessage = txError.reason;
+      } else if (txError.message) {
+        if (txError.message.includes('InvalidPermitSignature')) {
+          errorMessage = 'Invalid permit signature';
+        } else if (txError.message.includes('PermitAlreadyUsed')) {
+          errorMessage = 'This permit has already been used';
+        } else if (txError.message.includes('PermitExpired')) {
+          errorMessage = 'Permit has expired';
+        } else if (txError.message.includes('InsufficientBalance')) {
+          errorMessage = 'Insufficient balance';
+        } else if (txError.message.includes('InvalidFeeAmount')) {
+          errorMessage = 'Invalid fee amount';
+        } else if (txError.message.includes('EmptyRecipientList')) {
+          errorMessage = 'Recipient list cannot be empty';
+        } else if (txError.message.includes('InvalidRecipient')) {
+          errorMessage = 'One or more recipients have invalid addresses';
+        } else if (txError.message.includes('InvalidRecipientAmount')) {
+          errorMessage = 'One or more recipients have invalid amounts';
+        } else {
+          errorMessage = txError.message;
+        }
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: errorMessage
+      });
+    }
+
+  } catch (error) {
+    console.error('Bulk API error:', error);
     return res.status(500).json({
       success: false,
       error: error.message || 'Internal server error'

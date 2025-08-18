@@ -103,3 +103,86 @@ export const validateAmount = (amount, maxAmount = null) => {
     return false;
   }
 };
+
+// Bulk Transfer Utility Functions
+
+export const validateRecipient = (recipient) => {
+  if (!recipient.address || !recipient.amount) {
+    return false;
+  }
+  return validateAddress(recipient.address) && validateAmount(recipient.amount);
+};
+
+export const calculateTotalRecipientAmount = (recipients) => {
+  try {
+    return recipients.reduce((total, recipient) => {
+      return total + parseFloat(recipient.amount || 0);
+    }, 0);
+  } catch {
+    return 0;
+  }
+};
+
+export const formatRecipientsForContract = (recipients, decimals = 18) => {
+  return recipients.map(recipient => ({
+    to: recipient.address,
+    amount: formatUSDCAmount(recipient.amount, decimals)
+  }));
+};
+
+export const validateBulkTransferData = (recipients, totalAmount, feeAmount, userBalance) => {
+  const errors = {};
+  
+  if (!recipients || recipients.length === 0) {
+    errors.recipients = 'At least one recipient is required';
+    return errors;
+  }
+
+  // Validate each recipient
+  const recipientErrors = [];
+  recipients.forEach((recipient, index) => {
+    const recipientError = {};
+    
+    if (!validateAddress(recipient.address)) {
+      recipientError.address = 'Invalid address';
+    }
+    
+    if (!validateAmount(recipient.amount)) {
+      recipientError.amount = 'Invalid amount';
+    }
+    
+    if (Object.keys(recipientError).length > 0) {
+      recipientErrors[index] = recipientError;
+    }
+  });
+  
+  if (recipientErrors.length > 0) {
+    errors.recipients = recipientErrors;
+  }
+
+  // Validate total amounts
+  const calculatedTotal = calculateTotalRecipientAmount(recipients);
+  const totalWithFee = calculatedTotal + parseFloat(feeAmount || 0);
+  
+  if (Math.abs(parseFloat(totalAmount) - totalWithFee) > 0.000001) {
+    errors.totalAmount = 'Total amount must equal sum of recipients + fee';
+  }
+
+  if (parseFloat(totalAmount) > parseFloat(userBalance)) {
+    errors.totalAmount = 'Insufficient balance';
+  }
+
+  return errors;
+};
+
+export const createBulkTransferSummary = (recipients, feeAmount, decimals = 18) => {
+  const totalRecipientAmount = calculateTotalRecipientAmount(recipients);
+  const totalWithFee = totalRecipientAmount + parseFloat(feeAmount || 0);
+  
+  return {
+    recipientCount: recipients.length,
+    totalRecipientAmount: totalRecipientAmount.toFixed(decimals),
+    feeAmount: parseFloat(feeAmount || 0).toFixed(decimals),
+    totalAmount: totalWithFee.toFixed(decimals)
+  };
+};

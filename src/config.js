@@ -147,6 +147,70 @@ export const FACILITATOR_ABI = [
     "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "owner", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "recipientCount", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "totalAmountSent", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "feeAmount", "type": "uint256"}
+    ],
+    "name": "BulkFacilitationExecuted",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {"internalType": "address", "name": "owner", "type": "address"},
+      {
+        "components": [
+          {"internalType": "address", "name": "to", "type": "address"},
+          {"internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "internalType": "struct USDCFacilitator.Recipient[]",
+        "name": "recipients",
+        "type": "tuple[]"
+      },
+      {"internalType": "uint256", "name": "totalValue", "type": "uint256"},
+      {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+      {"internalType": "uint8", "name": "v", "type": "uint8"},
+      {"internalType": "bytes32", "name": "r", "type": "bytes32"},
+      {"internalType": "bytes32", "name": "s", "type": "bytes32"},
+      {"internalType": "uint256", "name": "feeAmount", "type": "uint256"}
+    ],
+    "name": "facilitateBulkTransferWithPermit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {"internalType": "address", "name": "to", "type": "address"},
+          {"internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "internalType": "struct USDCFacilitator.Recipient[]",
+        "name": "recipients",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "calculateTotalRecipientAmount",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "address", "name": "owner", "type": "address"},
+      {"internalType": "uint256", "name": "totalValue", "type": "uint256"},
+      {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+      {"internalType": "uint256", "name": "recipientCount", "type": "uint256"}
+    ],
+    "name": "calculateBulkPermitHash",
+    "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+    "stateMutability": "view",
+    "type": "function"
   }
 ];
 
